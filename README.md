@@ -60,7 +60,14 @@ Here are some stunning examples of NFTs minted with NFT Forge, showcasing the di
 ### 1. 🔗 **Connect Your Wallet**
 Simply connect your Web3 wallet to Shape Sepolia Network.
 
-### 2. 🎨 **Choose Your Theme & Rarity**  
+### 2. 💳 **Seamless Payment**
+Pay 0.01 ETH through our integrated payment system. Credits are instantly available for minting.
+
+### 3. **Force refresh credits** 
+Once payment is confirmed press the button to force refresh credits
+(This is an issue that I didnt manage to resolve , for the frontend to auto update the credits and will be fixed in the future)
+
+### 4. 🎨 **Choose Your Theme & Rarity**  
 You have full creative control! Select from five distinct artistic themes:
 - **Shape Network**: Geometric crystalline forms with deep teals and electric blues
 - **Cosmic Digital**: Stellar abstracts with cosmic nebula colors  
@@ -70,16 +77,15 @@ You have full creative control! Select from five distinct artistic themes:
 
 Then pick your desired rarity level for visual complexity.
 
-### 3. ⚡ **Choose Your Rarity**
+### 5. ⚡ **Choose Your Rarity**
 - **Common**: Clean, elegant designs
 - **Rare**: Enhanced lighting and special effects  
 - **Epic**: Additional atmospheric effects and refined details
 - **Legendary**: Maximum visual complexity with particle effects and multiple light sources
 
-### 4. 💳 **Seamless Payment**
-Pay 0.01 ETH through our integrated payment system. Credits are instantly available for minting.
 
-### 5. 🎯 **AI Generation & Minting**
+### 6. 🎯 **AI Generation & Minting**
+Press Generate and Mint NFT.
 Watch as our AI creates your personalized masterpiece and automatically mints it to your wallet on Shape Sepolia Network.
 
 ---
