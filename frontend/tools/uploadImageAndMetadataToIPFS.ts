@@ -235,7 +235,7 @@ export async function mint(to: string, metadataIpfsUrl: string) {
                 address: FORGE_PAYMENT_ADDRESS,
                 abi: FORGE_PAYMENT_ABI,
                 functionName: 'useMintingCredit',
-                args: [to]
+                args: [to as `0x${string}`]
             });
             console.log('Payment credit decremented, tx hash:', paymentTx);
         } catch (paymentError) {
