@@ -10,6 +10,7 @@ interface GenerateImageArgs {
     prompt: string;
 }
 
+
 export const generateImageTool: ToolConfig<GenerateImageArgs> = {
     definition: {
         function: {
@@ -25,37 +26,33 @@ export const generateImageTool: ToolConfig<GenerateImageArgs> = {
         }
     },
     handler: async ({ prompt }) => {
-        const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        return generateImage(prompt);
+    }
+}
 
-        try {
-            const response = await client.images.generate({
-                model: "dall-e-3",
-                prompt: prompt,
-                size: "1024x1024",
-                quality: "standard",
-                n: 1,
-            });
-            
-            if (!response.data || !Array.isArray(response.data) || response.data.length === 0) {
-                throw new Error('Image response data is undefined or empty');
-            }
-            const url = response.data[0].url;
-            if (!url) {
-                throw new Error('Image URL is undefined');
-            }
-            
-            console.log("Generated image URL:", url);
-            
-            // Return the URL directly instead of saving locally
-            // This works better in serverless environments like Vercel
-            return {
-                filePath: url, // Return the DALL-E URL directly
-                message: `Image generated successfully. FULL_DALLE_URL:${url}`
-            };
-        } catch (error) {
-            console.error('Error generating image:', error);
-            throw error;
+// Standalone function for API use
+export async function generateImage(prompt: string): Promise<string> {
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    try {
+        const response = await client.images.generate({
+            model: "dall-e-3",
+            prompt: prompt,
+            size: "1024x1024",
+            quality: "standard",
+            n: 1,
+        });
+        if (!response.data || !Array.isArray(response.data) || response.data.length === 0) {
+            throw new Error('Image response data is undefined or empty');
         }
+        const url = response.data[0].url;
+        if (!url) {
+            throw new Error('Image URL is undefined');
+        }
+        console.log("Generated image URL:", url);
+        return url;
+    } catch (error) {
+        console.error('Error generating image:', error);
+        throw error;
     }
 }
 
