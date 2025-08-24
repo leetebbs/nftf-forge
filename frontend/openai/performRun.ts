@@ -7,13 +7,27 @@ import { handleRunToolCalls } from "./handleRunToolCall";
 export async function performRun(client: OpenAI, thread: Thread, run: Run) {
    console.log('Starting performRun with initial status:', run.status);
    
+   // Track minting operations to prevent duplicates across the entire run
+   let mintingCompleted = false;
+   
    // Simple polling approach
    while (run.status !== "completed" && run.status !== "failed" && run.status !== "cancelled" && run.status !== "expired") {
      console.log('Current run status:', run.status);
      
      if (run.status === "requires_action") {
        console.log('Run requires action, handling tool calls...');
-       run = await handleRunToolCalls(client, thread, run);
+       
+       // Check if this batch has minting calls
+       const toolCalls = run.required_action?.submit_tool_outputs?.tool_calls;
+       const hasMintingCall = toolCalls?.some(call => call.function.name === 'uploadImageAndMetadataToIPFS');
+       
+       run = await handleRunToolCalls(client, thread, run, { mintingCompleted });
+       
+       // Mark minting as completed after the first successful minting call
+       if (hasMintingCall && !mintingCompleted) {
+         mintingCompleted = true;
+         console.log('🎯 Minting operation completed - preventing further minting calls');
+       }
      } else {
        // Wait and then refresh the run
        await new Promise(resolve => setTimeout(resolve, 1000));

@@ -26,6 +26,7 @@ export const checkPaymentTool: ToolConfig<CheckPaymentArgs> = {
   },
   handler: async ({ userAddress }: CheckPaymentArgs) => {
     try {
+      console.log('🔍 CheckPayment tool called for address:', userAddress);
       const publicClient = createViemPublicClient();
       
       // Check if user can mint (has paid tokens available)
@@ -52,7 +53,7 @@ export const checkPaymentTool: ToolConfig<CheckPaymentArgs> = {
         args: []
       });
 
-      return {
+      const result = {
         success: true,
         userAddress,
         canMint,
@@ -62,6 +63,9 @@ export const checkPaymentTool: ToolConfig<CheckPaymentArgs> = {
           ? `User has ${paidTokenCount} paid tokens available for minting`
           : `User has no paid tokens available. They need to pay ${mintPrice} wei (0.01 ETH) to mint`
       };
+
+      console.log('🔍 CheckPayment tool result:', JSON.stringify(result, null, 2));
+      return result;
     } catch (error) {
       console.error('Error checking payment:', error);
       return {

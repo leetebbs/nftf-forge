@@ -33,6 +33,8 @@ STRICT RULES:
 - The uploadImageAndMetadataToIPFS tool accepts URLs as the filePath parameter - pass the DALL-E URL directly!
 - AFTER SUCCESSFUL MINTING: Call useMintingCredit to reduce the user's credit count
 - AFTER SUCCESSFUL MINTING: Provide a concise final response and STOP immediately
+- IF YOU RECEIVE "MINTING_ALREADY_COMPLETED" error, STOP immediately and provide a summary response
+- NEVER attempt to mint again if you get any minting success message or "MINTING_ALREADY_COMPLETED" error
 
 Payment Flow:
 - The user's wallet address is provided in the prompt

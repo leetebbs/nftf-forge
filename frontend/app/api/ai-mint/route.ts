@@ -194,6 +194,22 @@ export async function POST(request: NextRequest) {
       const responseText = result.text.value;
       console.log('Assistant response text:', responseText);
       
+      // Check for payment required first
+      if (responseText.includes("Payment required!") || 
+          responseText.includes("Please pay") ||
+          responseText.includes("payment interface first") ||
+          responseText.includes("need to pay") ||
+          responseText.includes("no paid tokens available")) {
+        
+        console.log('Payment required detected');
+        return NextResponse.json({
+          success: false,
+          message: "Payment required",
+          details: responseText,
+          error: "PAYMENT_REQUIRED"
+        }, { status: 400 });
+      }
+      
       // Look for indicators that the assistant completed the full workflow
       // Priority order: check for our required format first, then fallbacks
       if (responseText.includes("Successfully minted your NFT") || 
@@ -287,8 +303,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4. Fallback: If assistant didn't complete workflow, try legacy DALL-E extraction
-    console.log('Assistant did not complete workflow, falling back to legacy approach...');
+    // 4. Fallback: If assistant didn't complete workflow, check if it's due to payment issues
+    console.log('Assistant did not complete workflow, checking for payment issues...');
+    
+    // Check if the result indicates payment is required
+    if (result && result.type === "text" && result.text) {
+      const responseText = result.text.value;
+      if (responseText.includes("Payment required!") || 
+          responseText.includes("Please pay") ||
+          responseText.includes("payment interface first") ||
+          responseText.includes("need to pay") ||
+          responseText.includes("no paid tokens available")) {
+        
+        console.log('Payment required detected in fallback');
+        return NextResponse.json({
+          success: false,
+          message: "Payment required",
+          details: responseText,
+          error: "PAYMENT_REQUIRED"
+        }, { status: 400 });
+      }
+    }
+    
+    // Try legacy DALL-E extraction only if it's not a payment issue
+    console.log('Attempting legacy approach...');
     const dalleUrl = extractDalleUrl(result);
 
     if (!dalleUrl) {
