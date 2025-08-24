@@ -73,6 +73,7 @@ function parseNFTData(responseText: string): NFTData | null {
     
     // Enhanced DALL-E URL detection - look for multiple patterns
     const dalleUrlPatterns = [
+      /\[FULL_DALLE_URL\]\((https?:\/\/[^\)]+)\)/gi,  // Markdown link format
       /FULL_DALLE_URL:(https?:\/\/[^\s,\)\]\}\"\']*)/gi,
       /(https?:\/\/[^\s]*(?:blob\.core\.windows\.net|oaidalleapi|openai)[^\s,\)\]\}\"\']*)/gi,
       /(https?:\/\/[^\s]*dalleapi[^\s,\)\]\}\"\']*)/gi,
@@ -116,14 +117,18 @@ function parseNFTData(responseText: string): NFTData | null {
       console.log('All URLs found:', allUrls);
     }
     
-    // Look for IPFS URLs
-    const metadataUrlMatch = responseText.match(/metadata.*?url[:\s]+(https?:\/\/[^\s,\)\]]+)/i) ||
-                            responseText.match(/ipfs[:\s]+(https?:\/\/[^\s,\)\]]+)/i) ||
-                            responseText.match(/(https?:\/\/[^\s]*ipfs[^\s,\)\]]*)/i);
+    // Look for IPFS URLs in various formats
+    const metadataUrlMatch = responseText.match(/\[ipfs:\/\/([^\]]+)\]/i)?.[1] ? `ipfs://${responseText.match(/\[ipfs:\/\/([^\]]+)\]/i)?.[1]}` :
+                            responseText.match(/\[(.*?)\]\((ipfs:\/\/[^\)]+)\)/i)?.[2] ||
+                            responseText.match(/metadata.*?url[:\s]+(https?:\/\/[^\s,\)\]]+)/i)?.[1] ||
+                            responseText.match(/ipfs[:\s]+(https?:\/\/[^\s,\)\]]+)/i)?.[1] ||
+                            responseText.match(/(https?:\/\/[^\s]*ipfs[^\s,\)\]]*)/i)?.[1] ||
+                            responseText.match(/(ipfs:\/\/[A-Za-z0-9]+)/i)?.[1];
     
-    const txHashMatch = responseText.match(/transaction.*?hash[:\s]+([0-9a-fA-F]{64})/i) ||
-                       responseText.match(/tx[:\s]+([0-9a-fA-F]{64})/i) ||
-                       responseText.match(/hash[:\s]+([0-9a-fA-F]{64})/i);
+    const txHashMatch = responseText.match(/\*\*.*?Transaction Hash.*?\*\*.*?`([0-9a-fA-F]{64})`/i)?.[1] ||
+                       responseText.match(/transaction.*?hash[:\s]*`?([0-9a-fA-F]{64})`?/i)?.[1] ||
+                       responseText.match(/tx[:\s]*`?([0-9a-fA-F]{64})`?/i)?.[1] ||
+                       responseText.match(/hash[:\s]*`?([0-9a-fA-F]{64})`?/i)?.[1];
     
     const tokenIdMatch = responseText.match(/token.*?id[:\s]+(\d+)/i) ||
                         responseText.match(/id[:\s]+(\d+)/i);
@@ -132,16 +137,22 @@ function parseNFTData(responseText: string): NFTData | null {
                          responseText.match(/address[:\s]+(0x[0-9a-fA-F]{40})/i);
 
     // Look for IPFS hash in the response
-    const ipfsHashMatch = responseText.match(/ipfs.*?hash[:\s]+([A-Za-z0-9]{46,})/i) ||
-                         responseText.match(/QmR[A-Za-z0-9]{44}/i);
+    const ipfsHashMatch = responseText.match(/ipfs.*?hash[:\s]+([A-Za-z0-9]{46,})/i)?.[1] ||
+                         responseText.match(/QmR[A-Za-z0-9]{44}/i)?.[1];
+
+    // Look for block number
+    const blockNumberMatch = responseText.match(/\*\*Block Number.*?\*\*.*?`(\d+)`/i)?.[1] ||
+                            responseText.match(/block.*?number[:\s]*`?(\d+)`?/i)?.[1] ||
+                            responseText.match(/block[:\s]*`?(\d+)`?/i)?.[1];
 
     const extractedData = {
       imageUrl: imageUrlMatch,
-      metadataUrl: metadataUrlMatch?.[1],
-      transactionHash: txHashMatch?.[1],
-      tokenId: tokenIdMatch?.[1],
+      metadataUrl: metadataUrlMatch,
+      transactionHash: txHashMatch,
+      tokenId: tokenIdMatch,
       contractAddress: contractMatch?.[1],
-      ipfsHash: ipfsHashMatch?.[1],
+      blockNumber: blockNumberMatch,
+      ipfsHash: ipfsHashMatch,
       name: "AI NFT Forge",
       description: "AI-generated NFT"
     };
@@ -169,6 +180,9 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
   const [result, setResult] = useState<MintResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
+  const [apiCredits, setApiCredits] = useState<string | null>(null);
+  const [apiCanMint, setApiCanMint] = useState<boolean | null>(null);
+  const [useApiFallback, setUseApiFallback] = useState(false);
 
   // Sync target address when wallet connects/changes
   React.useEffect(() => {
@@ -185,6 +199,10 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
     args: targetAddress && isAddress(targetAddress) ? [targetAddress] : undefined,
     query: {
       enabled: !!(targetAddress && isAddress(targetAddress)),
+      staleTime: 0, // Always consider data stale
+      gcTime: 0, // Don't cache
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
     },
   });
 
@@ -196,8 +214,40 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
     args: targetAddress && isAddress(targetAddress) ? [targetAddress] : undefined,
     query: {
       enabled: !!(targetAddress && isAddress(targetAddress)),
+      staleTime: 0, // Always consider data stale
+      gcTime: 0, // Don't cache
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
     },
   });
+
+  // Auto-check API if wagmi data seems stale (shows 0 credits when it shouldn't)
+  React.useEffect(() => {
+    if (targetAddress && isAddress(targetAddress) && !canMint && Number(paidTokenCount || 0) === 0) {
+      // Automatically check API when wagmi shows no credits, with a small delay
+      const timer = setTimeout(async () => {
+        try {
+          const response = await fetch(`/api/check-user-credits?address=${targetAddress}`);
+          const data = await response.json();
+          
+          if (data.paidTokenCount && parseInt(data.paidTokenCount) > 0) {
+            // API shows credits but wagmi doesn't - use API fallback
+            setApiCredits(data.paidTokenCount);
+            setApiCanMint(data.canMint || false);
+            setUseApiFallback(true);
+          }
+        } catch (err) {
+          console.error('Auto API check failed:', err);
+        }
+      }, 1000); // 1 second delay
+
+      return () => clearTimeout(timer);
+    }
+  }, [targetAddress, canMint, paidTokenCount]);
+
+  // Use API fallback if wagmi data seems stale
+  const effectiveCanMint = useApiFallback ? apiCanMint : canMint;
+  const effectivePaidTokenCount = useApiFallback ? (apiCredits ? parseInt(apiCredits) : 0) : Number(paidTokenCount || 0);
 
   const copyToClipboard = async (text: string, item: string) => {
     try {
@@ -212,6 +262,24 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
   const handlePaymentSuccess = () => {
     refetchCanMint();
     refetchPaidTokenCount();
+    
+    // Also trigger API check after payment to ensure we get latest data
+    setTimeout(async () => {
+      if (targetAddress && isAddress(targetAddress)) {
+        try {
+          const response = await fetch(`/api/check-user-credits?address=${targetAddress}`);
+          const data = await response.json();
+          
+          if (data.paidTokenCount && parseInt(data.paidTokenCount) > 0) {
+            setApiCredits(data.paidTokenCount);
+            setApiCanMint(data.canMint || false);
+            setUseApiFallback(true);
+          }
+        } catch (err) {
+          console.error('Post-payment API check failed:', err);
+        }
+      }
+    }, 2000); // Wait 2 seconds for transaction to be confirmed
   };
 
   const handleMint = async () => {
@@ -220,7 +288,7 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
       return;
     }
 
-    if (!canMint) {
+    if (!effectiveCanMint) {
       setError('Payment required before minting. Please complete payment first.');
       return;
     }
@@ -361,7 +429,7 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
 
           <Button 
             onClick={handleMint} 
-            disabled={isLoading || !targetAddress || !canMint}
+            disabled={isLoading || !targetAddress || !effectiveCanMint}
             className="w-full"
           >
             {isLoading ? (
@@ -369,7 +437,7 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Generating & Minting...
               </>
-            ) : !canMint ? (
+            ) : !effectiveCanMint ? (
               'Payment Required First'
             ) : (
               'Generate & Mint NFT'
@@ -385,38 +453,21 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
       </Card>
 
       {/* Payment Card - Show when target address is set and user hasn't paid */}
-      {targetAddress && isAddress(targetAddress) && !canMint && (
-        <>
-          {/* Debug info - remove in production */}
-          {process.env.NODE_ENV === 'development' && (
-            <Card className="mb-4 border-yellow-200 bg-yellow-50">
-              <CardContent className="p-4">
-                <div className="text-xs text-gray-600">
-                  <p><strong>Debug Info:</strong></p>
-                  <p>Target Address: {targetAddress}</p>
-                  <p>Can Mint: {canMint ? 'Yes' : 'No'}</p>
-                  <p>Paid Token Count: {Number(paidTokenCount || 0)}</p>
-                  <p>Connected Address: {address}</p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          
-          <PaymentCard 
-            onPaymentSuccess={handlePaymentSuccess} 
-            targetAddress={targetAddress}
-          />
-        </>
+      {targetAddress && isAddress(targetAddress) && !effectiveCanMint && (
+        <PaymentCard 
+          onPaymentSuccess={handlePaymentSuccess} 
+          targetAddress={targetAddress}
+        />
       )}
 
       {/* Payment Status - Show when user has credits */}
-      {targetAddress && isAddress(targetAddress) && canMint && (
+      {targetAddress && isAddress(targetAddress) && effectiveCanMint && (
         <Card className="border-green-200 bg-green-50">
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-green-700">
               <CheckCircle className="h-5 w-5" />
               <span className="font-medium">
-                Payment Complete - {Number(paidTokenCount || 0)} minting credit(s) available
+                Payment Complete - {effectivePaidTokenCount} minting credit(s) available
               </span>
             </div>
           </CardContent>

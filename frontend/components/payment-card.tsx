@@ -45,6 +45,10 @@ export function PaymentCard({ onPaymentSuccess, targetAddress }: PaymentCardProp
     args: userAddress ? [userAddress as `0x${string}`] : undefined,
     query: {
       enabled: !!userAddress,
+      staleTime: 0, // Always consider data stale
+      gcTime: 0, // Don't cache
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
     },
   });
 
@@ -56,6 +60,10 @@ export function PaymentCard({ onPaymentSuccess, targetAddress }: PaymentCardProp
     args: userAddress ? [userAddress as `0x${string}`] : undefined,
     query: {
       enabled: !!userAddress,
+      staleTime: 0, // Always consider data stale
+      gcTime: 0, // Don't cache
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
     },
   });
 
