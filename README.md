@@ -58,7 +58,7 @@ Here are some stunning examples of NFTs minted with NFT Forge, showcasing the di
 ## 🚀 How It Works - The Magic Behind the Scenes
 
 ### 1. 🔗 **Connect Your Wallet**
-Simply connect your Web3 wallet to Shape Network.
+Simply connect your Web3 wallet to Shape Sepolia Network.
 
 ### 2. 🎨 **Choose Your Theme & Rarity**  
 You have full creative control! Select from five distinct artistic themes:
