@@ -6,6 +6,8 @@
 **💳 ForgePayment Contract:** `0x0F8B14c7a8f9Ac940C75fd764Fa7Fd61c1dB60C4`  
 **🤖 AI Wallet Address:** `0x473fa0F100981fffFf40dB48B29B97AF9A44Dbbc`
 
+**Deployed on Shape Sepolia Testnet**
+
 ---
 
 ## 🌟 Welcome to Shape NFT Forge
