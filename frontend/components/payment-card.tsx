@@ -118,8 +118,23 @@ export function PaymentCard({ onPaymentSuccess, targetAddress }: PaymentCardProp
     if (isConfirmed) {
       setSuccess(true);
       setIsLoading(false);
+      
+      // Immediately refetch multiple times to overcome caching
       refetchPaidTokens();
       refetchCanMint();
+      
+      // Schedule additional refetches to ensure data is updated
+      setTimeout(() => {
+        refetchPaidTokens();
+        refetchCanMint();
+      }, 1000);
+      
+      setTimeout(() => {
+        refetchPaidTokens();
+        refetchCanMint();
+      }, 3000);
+      
+      // Call parent success handler
       onPaymentSuccess();
     }
   }, [isConfirmed, refetchPaidTokens, refetchCanMint, onPaymentSuccess]);

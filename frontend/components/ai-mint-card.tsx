@@ -183,6 +183,7 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
   const [apiCredits, setApiCredits] = useState<string | null>(null);
   const [apiCanMint, setApiCanMint] = useState<boolean | null>(null);
   const [useApiFallback, setUseApiFallback] = useState(false);
+  const [isRefreshingCredits, setIsRefreshingCredits] = useState(false);
 
   // Sync target address when wallet connects/changes
   React.useEffect(() => {
@@ -223,18 +224,34 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
 
   // Auto-check API if wagmi data seems stale (shows 0 credits when it shouldn't)
   React.useEffect(() => {
-    if (targetAddress && isAddress(targetAddress) && !canMint && Number(paidTokenCount || 0) === 0) {
+    console.log('Auto-fallback check:', {
+      targetAddress,
+      canMint,
+      paidTokenCount: Number(paidTokenCount || 0),
+      useApiFallback,
+      apiCredits,
+      condition: targetAddress && isAddress(targetAddress) && (canMint === false || canMint === undefined) && Number(paidTokenCount || 0) === 0
+    });
+    
+    if (targetAddress && isAddress(targetAddress) && (canMint === false || canMint === undefined) && Number(paidTokenCount || 0) === 0) {
+      console.log('Auto-fallback triggered: wagmi shows no credits, checking API...');
       // Automatically check API when wagmi shows no credits, with a small delay
       const timer = setTimeout(async () => {
         try {
+          console.log(`Checking API for credits: ${targetAddress}`);
           const response = await fetch(`/api/check-user-credits?address=${targetAddress}`);
           const data = await response.json();
           
+          console.log('API response:', data);
+          
           if (data.paidTokenCount && parseInt(data.paidTokenCount) > 0) {
             // API shows credits but wagmi doesn't - use API fallback
+            console.log('API shows credits, switching to fallback mode');
             setApiCredits(data.paidTokenCount);
             setApiCanMint(data.canMint || false);
             setUseApiFallback(true);
+          } else {
+            console.log('API also shows no credits');
           }
         } catch (err) {
           console.error('Auto API check failed:', err);
@@ -245,9 +262,46 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
     }
   }, [targetAddress, canMint, paidTokenCount]);
 
+  // Force API fallback when wagmi is undefined (broken)
+  React.useEffect(() => {
+    if (targetAddress && isAddress(targetAddress) && canMint === undefined && !useApiFallback) {
+      console.log('Wagmi appears broken (undefined), forcing API fallback immediately...');
+      
+      const checkAPI = async () => {
+        try {
+          const response = await fetch(`/api/check-user-credits?address=${targetAddress}&t=${Date.now()}`);
+          const data = await response.json();
+          
+          console.log('Emergency API check result:', data);
+          setApiCredits(data.paidTokenCount || '0');
+          setApiCanMint(data.canMint || false);
+          setUseApiFallback(true);
+        } catch (err) {
+          console.error('Emergency API check failed:', err);
+        }
+      };
+      
+      checkAPI();
+    }
+  }, [targetAddress, canMint, useApiFallback]);
+
   // Use API fallback if wagmi data seems stale
   const effectiveCanMint = useApiFallback ? apiCanMint : canMint;
   const effectivePaidTokenCount = useApiFallback ? (apiCredits ? parseInt(apiCredits) : 0) : Number(paidTokenCount || 0);
+
+  // If wagmi returned undefined and we haven't tried API fallback yet, default to false for cleaner UX
+  const finalCanMint = effectiveCanMint === undefined ? false : effectiveCanMint;
+
+  console.log('Effective values:', {
+    useApiFallback,
+    wagmiCanMint: canMint,
+    wagmiPaidTokenCount: Number(paidTokenCount || 0),
+    apiCanMint,
+    apiCredits,
+    effectiveCanMint,
+    finalCanMint,
+    effectivePaidTokenCount
+  });
 
   const copyToClipboard = async (text: string, item: string) => {
     try {
@@ -260,26 +314,48 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
   };
 
   const handlePaymentSuccess = () => {
+    console.log('Payment success detected, refreshing credit data...');
+    setIsRefreshingCredits(true);
+    
+    // Immediately refetch wagmi data
     refetchCanMint();
     refetchPaidTokenCount();
     
-    // Also trigger API check after payment to ensure we get latest data
-    setTimeout(async () => {
+    // Force multiple refreshes to overcome any caching issues
+    const refreshData = async (attempt = 1) => {
       if (targetAddress && isAddress(targetAddress)) {
         try {
-          const response = await fetch(`/api/check-user-credits?address=${targetAddress}`);
+          console.log(`Refresh attempt ${attempt}: Checking credits for ${targetAddress}`);
+          const response = await fetch(`/api/check-user-credits?address=${targetAddress}&t=${Date.now()}`);
           const data = await response.json();
+          
+          console.log(`Refresh attempt ${attempt} result:`, data);
           
           if (data.paidTokenCount && parseInt(data.paidTokenCount) > 0) {
             setApiCredits(data.paidTokenCount);
             setApiCanMint(data.canMint || false);
             setUseApiFallback(true);
+            setIsRefreshingCredits(false);
+            console.log('Credits detected via API, switching to API fallback mode');
+          } else if (attempt < 3) {
+            // Retry up to 3 times with increasing delays
+            setTimeout(() => refreshData(attempt + 1), attempt * 2000);
+          } else {
+            setIsRefreshingCredits(false);
           }
         } catch (err) {
-          console.error('Post-payment API check failed:', err);
+          console.error(`Post-payment API check failed (attempt ${attempt}):`, err);
+          if (attempt < 3) {
+            setTimeout(() => refreshData(attempt + 1), attempt * 2000);
+          } else {
+            setIsRefreshingCredits(false);
+          }
         }
       }
-    }, 2000); // Wait 2 seconds for transaction to be confirmed
+    };
+    
+    // Start the first refresh after a short delay
+    setTimeout(() => refreshData(1), 2000);
   };
 
   const handleMint = async () => {
@@ -324,6 +400,35 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
 
       setResult(data);
       if (onProgress) onProgress(100);
+      
+      // After successful mint, refresh credit data to show consumption
+      if (targetAddress && isAddress(targetAddress)) {
+        console.log('Mint successful, refreshing credit data...');
+        // Immediate refresh
+        refetchCanMint();
+        refetchPaidTokenCount();
+        
+        // Also check API to ensure consistency
+        setTimeout(async () => {
+          try {
+            const response = await fetch(`/api/check-user-credits?address=${targetAddress}&t=${Date.now()}`);
+            const apiData = await response.json();
+            console.log('Post-mint API check:', apiData);
+            
+            // Update API fallback data
+            setApiCredits(apiData.paidTokenCount || '0');
+            setApiCanMint(apiData.canMint || false);
+            
+            // If wagmi and API differ, use API
+            if (apiData.canMint !== canMint) {
+              console.log('Post-mint: wagmi/API mismatch, using API fallback');
+              setUseApiFallback(true);
+            }
+          } catch (err) {
+            console.error('Post-mint API check failed:', err);
+          }
+        }, 1000);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
       if (onProgress) onProgress(0);
@@ -429,7 +534,7 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
 
           <Button 
             onClick={handleMint} 
-            disabled={isLoading || !targetAddress || !effectiveCanMint}
+            disabled={isLoading || !targetAddress || !finalCanMint || isRefreshingCredits}
             className="w-full"
           >
             {isLoading ? (
@@ -437,12 +542,46 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Generating & Minting...
               </>
-            ) : !effectiveCanMint ? (
+            ) : isRefreshingCredits ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Refreshing Credits...
+              </>
+            ) : !finalCanMint ? (
               'Payment Required First'
             ) : (
               'Generate & Mint NFT'
             )}
           </Button>
+
+          {/* Debug button to force API check */}
+          {!finalCanMint && (
+            <Button 
+              onClick={async () => {
+                if (targetAddress && isAddress(targetAddress)) {
+                  console.log('Manual API check triggered');
+                  try {
+                    const response = await fetch(`/api/check-user-credits?address=${targetAddress}&t=${Date.now()}`);
+                    const data = await response.json();
+                    console.log('Manual API check result:', data);
+                    
+                    if (data.paidTokenCount && parseInt(data.paidTokenCount) > 0) {
+                      setApiCredits(data.paidTokenCount);
+                      setApiCanMint(data.canMint || false);
+                      setUseApiFallback(true);
+                      console.log('Manual fallback activated');
+                    }
+                  } catch (err) {
+                    console.error('Manual API check failed:', err);
+                  }
+                }
+              }}
+              variant="outline"
+              className="w-full mt-2"
+            >
+              🔄 Force Refresh Credits
+            </Button>
+          )}
 
           {error && (
             <Alert variant="destructive">
@@ -452,8 +591,8 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
         </CardContent>
       </Card>
 
-      {/* Payment Card - Show when target address is set and user hasn't paid */}
-      {targetAddress && isAddress(targetAddress) && !effectiveCanMint && (
+      {/* Payment Card - Show when target address is set and user hasn't paid AND no successful mint result */}
+      {targetAddress && isAddress(targetAddress) && !effectiveCanMint && !result && (
         <PaymentCard 
           onPaymentSuccess={handlePaymentSuccess} 
           targetAddress={targetAddress}

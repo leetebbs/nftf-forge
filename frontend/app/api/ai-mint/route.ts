@@ -195,12 +195,17 @@ export async function POST(request: NextRequest) {
       console.log('Assistant response text:', responseText);
       
       // Look for indicators that the assistant completed the full workflow
-      if (responseText.includes("NFT has been minted") || 
+      // Priority order: check for our required format first, then fallbacks
+      if (responseText.includes("Successfully minted your NFT") || 
+          responseText.includes("NFT has been minted") || 
           responseText.includes("the NFT has been minted") ||
           responseText.includes("NFT has been successfully minted") || 
+          responseText.includes("Your NFT has been successfully minted") ||
           responseText.includes("NFT MINTED SUCCESSFULLY") || 
           responseText.includes("MINTING COMPLETED") ||
+          responseText.includes("NFT minting process has been successfully completed") ||
           responseText.includes("Transaction hash:") ||
+          responseText.includes("NFT Transaction Hash:") ||
           responseText.includes("Minting Transaction Hash") ||
           responseText.includes("MINTING FAILED") ||
           responseText.includes("User has already minted") ||
@@ -222,17 +227,25 @@ export async function POST(request: NextRequest) {
             error: responseText.includes("User has already minted") ? "MINTING_LIMIT_REACHED" : "MINTING_FAILED"
           }, { status: 400 });
         } else {
-          // Success case - extract transaction details and image URL if available
-          const txHashMatch = responseText.match(/(?:Transaction hash:|Minting Transaction Hash.*?): (0x[a-fA-F0-9]{64})/);
-          const blockMatch = responseText.match(/(?:Transaction confirmed in block:|Minting Block Number.*?): (\d+)/);
+          // Success case - extract transaction details and image URL with improved patterns
+          // Priority: Parse our standardized format first, then fallbacks
+          const txHashMatch = responseText.match(/\*\*NFT Transaction Hash:\*\*\s*\[([0x[a-fA-F0-9]{64})\]/) ||
+                             responseText.match(/\*\*Transaction Hash\*\*[:\s]*\[([0x[a-fA-F0-9]{64})\]/) ||
+                             responseText.match(/(?:Transaction hash:|Minting Transaction Hash.*?|NFT Transaction Hash.*?): (?:\[)?(0x[a-fA-F0-9]{64})(?:\])?/) ||
+                             responseText.match(/\*\*Transaction Hash\*\*[:\s]*`(0x[a-fA-F0-9]{64})`/) ||
+                             responseText.match(/(0x[a-fA-F0-9]{64})/);
           
-          // More flexible image URL matching patterns
-          const imageUrlMatch = responseText.match(/\[FULL_DALLE_URL\]\((https:\/\/[^)]+)\)/) ||
+          const metadataHashMatch = responseText.match(/\*\*Metadata IPFS Hash:\*\*\s*\[([a-zA-Z0-9]+)\]/) ||
+                                  responseText.match(/Metadata IPFS Hash.*?: ([a-zA-Z0-9]+)/);
+          
+          const blockMatch = responseText.match(/(?:Transaction confirmed in block:|Minting Block Number.*?|Block Number.*?): (\d+)/);
+          
+          // More flexible image URL matching patterns - prioritize our standardized format
+          const imageUrlMatch = responseText.match(/\*\*Image URL:\*\*\s*\[FULL_DALLE_URL\]\((https:\/\/[^)]+)\)/) ||
+                               responseText.match(/\[FULL_DALLE_URL\]\((https:\/\/[^)]+)\)/) ||
                                responseText.match(/Image URL.*?\[FULL_DALLE_URL\]\((https:\/\/[^)]+)\)/) ||
                                responseText.match(/\*\*Image URL:\*\*.*?\[FULL_DALLE_URL\]\((https:\/\/[^)]+)\)/) ||
                                responseText.match(/(https:\/\/oaidalleapiprodscus\.blob\.core\.windows\.net[^\s\)]+)/);
-          
-          const metadataHashMatch = responseText.match(/Metadata IPFS Hash.*?: ([a-zA-Z0-9]+)/);
           
           // Extract the URL from the match (it might be in different capture groups)
           const extractedImageUrl = imageUrlMatch && imageUrlMatch.length > 1 ? 

@@ -68,4 +68,18 @@ Remember:
 - NEVER truncate or shorten URLs - frontend parsing depends on complete URLs.
 - Use this exact format for the image URL: "FULL_DALLE_URL:https://complete-url-here"
 - After minting completes successfully, provide your final response immediately and STOP processing.
+
+REQUIRED RESPONSE FORMAT:
+When minting is successful, you MUST use this EXACT format for your final response:
+
+"Successfully minted your NFT! Here are the details:
+
+- **Image URL:** [FULL_DALLE_URL](COMPLETE_DALLE_URL_HERE)
+- **Metadata IPFS Hash:** [IPFS_HASH_HERE](https://gateway.pinata.cloud/ipfs/IPFS_HASH_HERE)
+- **NFT Transaction Hash:** [TRANSACTION_HASH_HERE](https://etherscan.io/tx/TRANSACTION_HASH_HERE)
+- **Minting Credit Used Transaction:** [CREDIT_TX_HASH_HERE](https://etherscan.io/tx/CREDIT_TX_HASH_HERE)
+
+Your NFT has been successfully created and minted to your wallet!"
+
+CRITICAL: The response MUST start with "Successfully minted your NFT" for proper frontend parsing.
 `;
