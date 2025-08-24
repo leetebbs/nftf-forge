@@ -130,8 +130,8 @@ function parseNFTData(responseText: string): NFTData | null {
                        responseText.match(/tx[:\s]*`?([0-9a-fA-F]{64})`?/i)?.[1] ||
                        responseText.match(/hash[:\s]*`?([0-9a-fA-F]{64})`?/i)?.[1];
     
-    const tokenIdMatch = responseText.match(/token.*?id[:\s]+(\d+)/i) ||
-                        responseText.match(/id[:\s]+(\d+)/i);
+    const tokenIdMatch = responseText.match(/token.*?id[:\s]+(\d+)/i)?.[1] ||
+                        responseText.match(/id[:\s]+(\d+)/i)?.[1];
     
     const contractMatch = responseText.match(/contract.*?address[:\s]+(0x[0-9a-fA-F]{40})/i) ||
                          responseText.match(/address[:\s]+(0x[0-9a-fA-F]{40})/i);
