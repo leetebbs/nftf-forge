@@ -456,7 +456,16 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
   };
   
   // Use the image URL from direct result or parsed data
-  const imageUrl = result?.imageUrl || parsedData?.imageUrl;
+  // Convert ipfs:// URLs to HTTP gateway URLs for browser compatibility
+  function toHttpIpfsUrl(url?: string) {
+    if (!url) return undefined;
+    if (url.startsWith('ipfs://')) {
+      return `https://gateway.pinata.cloud/ipfs/${url.replace('ipfs://', '')}`;
+    }
+    return url;
+  }
+
+  const imageUrl = toHttpIpfsUrl(result?.imageUrl || parsedData?.imageUrl);
 
   return (
     <div className="w-full max-w-2xl space-y-6">

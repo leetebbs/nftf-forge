@@ -91,27 +91,17 @@ export const uploadImageAndMetadataToIPFSTool: ToolConfig<UploadToIPFSArgs> = {
 
             // Check if filePath is a URL or a local file path
             if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-                console.log('Processing DALL-E URL directly for NFT metadata:');
-                console.log('URL length:', filePath.length);
-                console.log('URL first 100 chars:', filePath.substring(0, 100));
-                console.log('URL last 100 chars:', filePath.substring(Math.max(0, filePath.length - 100)));
-                console.log('Full URL:', filePath);
-                
-                // For DALL-E URLs, we'll use the URL directly in the metadata
-                // instead of trying to download and re-upload to IPFS
-                
-                // Create a simple reference object for the "image" upload step
-                const imageRef = {
-                    url: filePath,
-                    name: name,
-                    description: description,
-                    timestamp: new Date().toISOString()
-                };
-                
-                console.log('Using DALL-E URL directly in NFT metadata');
+                // Use the new serverless function to pin the image URL to IPFS
+                const apiBase = process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+                const pinImageUrl = `${apiBase}/api/pin-image`;
+                console.log('Pinning remote image via', pinImageUrl, filePath);
+                const pinImageRes = await axios.post(pinImageUrl, { imageUrl: filePath });
+                if (!pinImageRes.data || !pinImageRes.data.IpfsHash) {
+                    throw new Error('Failed to pin image to IPFS via /api/pin-image');
+                }
                 ipfsData = {
-                    hash: 'dalle-url-direct', // Placeholder
-                    ipfsUrl: filePath // Use the DALL-E URL directly
+                    hash: pinImageRes.data.IpfsHash,
+                    ipfsUrl: `https://gateway.pinata.cloud/ipfs/${pinImageRes.data.IpfsHash}`
                 };
             } else {
                 console.log('Uploading from local file:', filePath);
@@ -207,7 +197,7 @@ export const uploadImageAndMetadataToIPFSTool: ToolConfig<UploadToIPFSArgs> = {
     }
 }
 
-async function mint(to: string, metadataIpfsUrl: string) {
+export async function mint(to: string, metadataIpfsUrl: string) {
     console.log("=== MINTING SINGLE NFT ===");
     console.log("Address to mint to:", to);
     console.log("Metadata IPFS URL:", metadataIpfsUrl);
@@ -236,6 +226,22 @@ async function mint(to: string, metadataIpfsUrl: string) {
         console.log("Transaction confirmed in block:", receipt.blockNumber);
         console.log("Gas used:", receipt.gasUsed);
         console.log("Status:", receipt.status);
+
+        // Decrement payment credit in ForgePayment contract
+        const { FORGE_PAYMENT_ADDRESS, FORGE_PAYMENT_ABI } = await import('../const/contractDetails');
+        try {
+            console.log('Calling useMintingCredit on ForgePayment contract for', to);
+            const paymentTx = await walletClient.writeContract({
+                address: FORGE_PAYMENT_ADDRESS,
+                abi: FORGE_PAYMENT_ABI,
+                functionName: 'useMintingCredit',
+                args: [to as `0x${string}`]
+            });
+            console.log('Payment credit decremented, tx hash:', paymentTx);
+        } catch (paymentError) {
+            console.error('Failed to decrement payment credit:', paymentError);
+            // Optionally: throw or continue
+        }
 
         return {
             success: true,

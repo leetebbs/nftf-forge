@@ -1,16 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
-import { createAssistant } from '../../../openai/createAssistant';
-import { createRun } from '../../../openai/createRun';
-import { createThread } from '../../../openai/createThread';
-import { performRun } from '../../../openai/performRun';
 import { shapes } from '../../../shapes';
 import { uploadFileToPinata, uploadJsonToPinata } from '../../../tools/pinataUtils';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 // Theme configurations (removed alchemy)
 const THEMES = {
@@ -181,162 +172,20 @@ export async function POST(request: NextRequest) {
       : '';
     const finalPrompt = aiPrompt + rarityEnhancement;
 
-    // 2. Generate image with OpenAI Assistant (handles full workflow including minting)
-    const assistant = await createAssistant(openai);
-    const thread = await createThread(openai, finalPrompt);
-    const run = await createRun(openai, thread, assistant.id);
-    const result = await performRun(openai, thread, run);
-
-    // 3. Check if assistant completed the full workflow first
-    console.log('Assistant result:', JSON.stringify(result, null, 2));
-    
-    if (result && result.type === "text" && result.text) {
-      const responseText = result.text.value;
-      console.log('Assistant response text:', responseText);
-      
-      // Check for payment required first
-      if (responseText.includes("Payment required!") || 
-          responseText.includes("Please pay") ||
-          responseText.includes("payment interface first") ||
-          responseText.includes("need to pay") ||
-          responseText.includes("no paid tokens available")) {
-        
-        console.log('Payment required detected');
-        return NextResponse.json({
-          success: false,
-          message: "Payment required",
-          details: responseText,
-          error: "PAYMENT_REQUIRED"
-        }, { status: 400 });
-      }
-      
-      // Look for indicators that the assistant completed the full workflow
-      // Priority order: check for our required format first, then fallbacks
-      if (responseText.includes("Successfully minted your NFT") || 
-          responseText.includes("NFT has been minted") || 
-          responseText.includes("the NFT has been minted") ||
-          responseText.includes("NFT has been successfully minted") || 
-          responseText.includes("Your NFT has been successfully minted") ||
-          responseText.includes("NFT MINTED SUCCESSFULLY") || 
-          responseText.includes("MINTING COMPLETED") ||
-          responseText.includes("NFT minting process has been successfully completed") ||
-          responseText.includes("Transaction hash:") ||
-          responseText.includes("NFT Transaction Hash:") ||
-          responseText.includes("Minting Transaction Hash") ||
-          responseText.includes("MINTING FAILED") ||
-          responseText.includes("User has already minted") ||
-          responseText.includes("Error uploading to IPFS")) {
-        
-        console.log('Assistant completed full workflow, processing response...');
-        console.log('Response text preview:', responseText.substring(0, 500));
-        
-        // Check for failure cases first
-        if (responseText.includes("MINTING FAILED") || 
-            responseText.includes("User has already minted") ||
-            responseText.includes("Error uploading to IPFS")) {
-          return NextResponse.json({
-            success: false,
-            message: responseText.includes("User has already minted") 
-              ? "This wallet has already minted the maximum number of NFTs allowed." 
-              : "Minting failed",
-            details: responseText,
-            error: responseText.includes("User has already minted") ? "MINTING_LIMIT_REACHED" : "MINTING_FAILED"
-          }, { status: 400 });
-        } else {
-          // Success case - extract transaction details and image URL with improved patterns
-          // Priority: Parse our standardized format first, then fallbacks
-          const txHashMatch = responseText.match(/\*\*NFT Transaction Hash:\*\*\s*\[([0x[a-fA-F0-9]{64})\]/) ||
-                             responseText.match(/\*\*Transaction Hash\*\*[:\s]*\[([0x[a-fA-F0-9]{64})\]/) ||
-                             responseText.match(/(?:Transaction hash:|Minting Transaction Hash.*?|NFT Transaction Hash.*?): (?:\[)?(0x[a-fA-F0-9]{64})(?:\])?/) ||
-                             responseText.match(/\*\*Transaction Hash\*\*[:\s]*`(0x[a-fA-F0-9]{64})`/) ||
-                             responseText.match(/(0x[a-fA-F0-9]{64})/);
-          
-          const metadataHashMatch = responseText.match(/\*\*Metadata IPFS Hash:\*\*\s*\[([a-zA-Z0-9]+)\]/) ||
-                                  responseText.match(/Metadata IPFS Hash.*?: ([a-zA-Z0-9]+)/);
-          
-          const blockMatch = responseText.match(/(?:Transaction confirmed in block:|Minting Block Number.*?|Block Number.*?): (\d+)/);
-          
-          // More flexible image URL matching patterns - prioritize our standardized format
-          const imageUrlMatch = responseText.match(/\*\*Image URL:\*\*\s*\[FULL_DALLE_URL\]\((https:\/\/[^)]+)\)/) ||
-                               responseText.match(/\[FULL_DALLE_URL\]\((https:\/\/[^)]+)\)/) ||
-                               responseText.match(/Image URL.*?\[FULL_DALLE_URL\]\((https:\/\/[^)]+)\)/) ||
-                               responseText.match(/\*\*Image URL:\*\*.*?\[FULL_DALLE_URL\]\((https:\/\/[^)]+)\)/) ||
-                               responseText.match(/(https:\/\/oaidalleapiprodscus\.blob\.core\.windows\.net[^\s\)]+)/);
-          
-          // Extract the URL from the match (it might be in different capture groups)
-          const extractedImageUrl = imageUrlMatch && imageUrlMatch.length > 1 ? 
-            (imageUrlMatch[1] || imageUrlMatch[2] || imageUrlMatch[0]) : null;
-          
-          const response: {
-            success: boolean;
-            message: string;
-            walletAddress: string;
-            transactionHash?: string;
-            blockNumber?: string;
-            details: string;
-            imageUrl?: string;
-            metadataHash?: string;
-          } = {
-            success: true,
-            message: "NFT created and minted successfully!",
-            walletAddress: message, // Add the target wallet address
-            transactionHash: txHashMatch ? txHashMatch[1] : undefined,
-            blockNumber: blockMatch ? blockMatch[1] : undefined,
-            details: responseText
-          };
-
-          // Add image URL if found
-          if (extractedImageUrl) {
-            response.imageUrl = extractedImageUrl;
-            console.log('Extracted image URL:', extractedImageUrl);
-          } else {
-            console.log('No image URL found in response:', responseText.substring(0, 500));
-          }
-
-          // Add metadata hash if found
-          if (metadataHashMatch) {
-            response.metadataHash = metadataHashMatch[1];
-          }
-          
-          return NextResponse.json(response);
-        }
-      }
-    }
-
-    // 4. Fallback: If assistant didn't complete workflow, check if it's due to payment issues
-    console.log('Assistant did not complete workflow, checking for payment issues...');
-    
-    // Check if the result indicates payment is required
-    if (result && result.type === "text" && result.text) {
-      const responseText = result.text.value;
-      if (responseText.includes("Payment required!") || 
-          responseText.includes("Please pay") ||
-          responseText.includes("payment interface first") ||
-          responseText.includes("need to pay") ||
-          responseText.includes("no paid tokens available")) {
-        
-        console.log('Payment required detected in fallback');
-        return NextResponse.json({
-          success: false,
-          message: "Payment required",
-          details: responseText,
-          error: "PAYMENT_REQUIRED"
-        }, { status: 400 });
-      }
-    }
-    
-    // Try legacy DALL-E extraction only if it's not a payment issue
-    console.log('Attempting legacy approach...');
-    const dalleUrl = extractDalleUrl(result);
+    // 2. Generate image with OpenAI (DALL-E) directly
+    // (Assume you have a function to generate the image and get the DALL-E URL)
+    // For this refactor, let's assume generateImage returns the DALL-E URL
+  const { generateImage } = await import('../../../tools/generateImage');
+  const dalleUrl: string = await generateImage(finalPrompt);
 
     if (!dalleUrl) {
       return NextResponse.json(
-        { error: 'Failed to extract DALL-E image URL from OpenAI result.' },
+        { error: 'Failed to generate DALL-E image URL.' },
         { status: 500 }
       );
     }
 
-    // 5. Download image from DALL-E URL (fallback legacy approach)
+    // 3. Download image from DALL-E URL
     const imageRes = await fetch(dalleUrl);
     if (!imageRes.ok) {
       return NextResponse.json(
@@ -346,7 +195,7 @@ export async function POST(request: NextRequest) {
     }
     const imageBuffer = Buffer.from(await imageRes.arrayBuffer());
 
-    // 6. Upload image to Pinata/IPFS (fallback legacy approach)
+    // 4. Upload image to Pinata/IPFS
     const pinataImageRes = await uploadFileToPinata(imageBuffer, {
       fileName: `nft-image-${Date.now()}.png`,
       apiKey: process.env.PINATA_API_KEY!,
@@ -354,9 +203,7 @@ export async function POST(request: NextRequest) {
     });
     const imageCid = pinataImageRes.IpfsHash;
 
-    
-
-    // 7. Create metadata with ipfs:// CID (fallback legacy approach)
+    // 5. Create metadata with ipfs:// CID
     const metadata = {
       name: `AI NFT - ${THEMES[selectedTheme].name}`,
       description: `AI-generated NFT for ${message} (${selectedTheme}, ${rarity})`,
@@ -368,15 +215,44 @@ export async function POST(request: NextRequest) {
       ]
     };
 
-    // 8. Upload metadata to Pinata/IPFS (fallback legacy approach)
-    const pinataMetaRes = await uploadJsonToPinata(metadata, {
-      fileName: `nft-metadata-${Date.now()}.json`,
-      apiKey: process.env.PINATA_API_KEY!,
-      apiSecret: process.env.PINATA_API_SECRET!,
-    });
-    const metadataCid = pinataMetaRes.IpfsHash;
+    // 6. Upload metadata to Pinata/IPFS
+const pinataMetaRes = await uploadJsonToPinata(metadata, {
+  fileName: `nft-metadata-${Date.now()}.json`,
+  apiKey: process.env.PINATA_API_KEY!,
+  apiSecret: process.env.PINATA_API_SECRET!,
+});
+const metadataCid = pinataMetaRes.IpfsHash;
 
-    // 9. Return metadata CID for minting (fallback legacy approach)
+// 7. Mint the NFT using the metadata IPFS URL
+const { mint } = await import('../../../tools/uploadImageAndMetadataToIPFS');
+let mintResult;
+try {
+  mintResult = await mint(message, `ipfs://${metadataCid}`);
+} catch (err) {
+  console.error('Minting failed:', err);
+  if (err instanceof Error && err.stack) {
+    console.error('Minting error stack:', err.stack);
+  }
+  return NextResponse.json({
+    success: false,
+    error: 'Minting failed',
+    details: err instanceof Error ? err.message : err,
+    errorStack: err instanceof Error && err.stack ? err.stack : undefined,
+    imageCid,
+    metadataCid,
+    imageUrl: `ipfs://${imageCid}`,
+    metadataUrl: `ipfs://${metadataCid}`,
+    walletAddress: message,
+    theme: selectedTheme,
+    rarity
+  }, { status: 500 });
+}
+
+    // Convert BigInt values to strings for JSON serialization
+    const safeMintResult = {
+      ...mintResult,
+      blockNumber: mintResult.blockNumber ? mintResult.blockNumber.toString() : undefined
+    };
     return NextResponse.json({
       success: true,
       imageCid,
@@ -386,7 +262,9 @@ export async function POST(request: NextRequest) {
       walletAddress: message,
       theme: selectedTheme,
       rarity,
-      message: 'NFT image and metadata uploaded to IPFS. Ready to mint!'
+      transactionHash: safeMintResult.transactionHash,
+      blockNumber: safeMintResult.blockNumber,
+      message: 'NFT image and metadata uploaded to IPFS and NFT minted!'
     });
 
   } catch (error) {
@@ -423,14 +301,4 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Utility to extract DALL-E URL from OpenAI result
-function extractDalleUrl(result: unknown): string | null {
-  // Implement your parsing logic here based on your OpenAI result structure
-  // Example:
-  if (typeof result === 'string') {
-    const match = result.match(/https:\/\/[^\s'"]+\.png[^\s'"]*/);
-    return match ? match[0] : null;
-  }
-  // If result is an object, adjust accordingly
-  return null;
-}
+
