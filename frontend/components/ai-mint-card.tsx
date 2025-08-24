@@ -11,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from '@/components/ui/separator';
 import { CheckCircle, Copy, ExternalLink, Loader2, Maximize2 } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { isAddress } from 'viem';
 import { useAccount, useReadContract } from 'wagmi';
 import { PaymentCard } from './payment-card';
@@ -170,6 +170,13 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
   const [error, setError] = useState<string | null>(null);
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
 
+  // Sync target address when wallet connects/changes
+  React.useEffect(() => {
+    if (isConnected && address && !targetAddress) {
+      setTargetAddress(address);
+    }
+  }, [isConnected, address, targetAddress]);
+
   // Check if target address can mint (has paid tokens)
   const { data: canMint, refetch: refetchCanMint } = useReadContract({
     address: FORGE_PAYMENT_ADDRESS,
@@ -182,7 +189,7 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
   });
 
   // Get paid token count for target address
-  const { data: paidTokenCount } = useReadContract({
+  const { data: paidTokenCount, refetch: refetchPaidTokenCount } = useReadContract({
     address: FORGE_PAYMENT_ADDRESS,
     abi: FORGE_PAYMENT_ABI,
     functionName: 'getUserPaidTokenCount',
@@ -204,6 +211,7 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
 
   const handlePaymentSuccess = () => {
     refetchCanMint();
+    refetchPaidTokenCount();
   };
 
   const handleMint = async () => {
@@ -378,10 +386,27 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
 
       {/* Payment Card - Show when target address is set and user hasn't paid */}
       {targetAddress && isAddress(targetAddress) && !canMint && (
-        <PaymentCard 
-          onPaymentSuccess={handlePaymentSuccess} 
-          targetAddress={targetAddress}
-        />
+        <>
+          {/* Debug info - remove in production */}
+          {process.env.NODE_ENV === 'development' && (
+            <Card className="mb-4 border-yellow-200 bg-yellow-50">
+              <CardContent className="p-4">
+                <div className="text-xs text-gray-600">
+                  <p><strong>Debug Info:</strong></p>
+                  <p>Target Address: {targetAddress}</p>
+                  <p>Can Mint: {canMint ? 'Yes' : 'No'}</p>
+                  <p>Paid Token Count: {Number(paidTokenCount || 0)}</p>
+                  <p>Connected Address: {address}</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
+          <PaymentCard 
+            onPaymentSuccess={handlePaymentSuccess} 
+            targetAddress={targetAddress}
+          />
+        </>
       )}
 
       {/* Payment Status - Show when user has credits */}
