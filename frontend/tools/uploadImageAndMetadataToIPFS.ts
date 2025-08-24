@@ -227,6 +227,22 @@ export async function mint(to: string, metadataIpfsUrl: string) {
         console.log("Gas used:", receipt.gasUsed);
         console.log("Status:", receipt.status);
 
+        // Decrement payment credit in ForgePayment contract
+        const { FORGE_PAYMENT_ADDRESS, FORGE_PAYMENT_ABI } = await import('../const/contractDetails');
+        try {
+            console.log('Calling useMintingCredit on ForgePayment contract for', to);
+            const paymentTx = await walletClient.writeContract({
+                address: FORGE_PAYMENT_ADDRESS,
+                abi: FORGE_PAYMENT_ABI,
+                functionName: 'useMintingCredit',
+                args: [to]
+            });
+            console.log('Payment credit decremented, tx hash:', paymentTx);
+        } catch (paymentError) {
+            console.error('Failed to decrement payment credit:', paymentError);
+            // Optionally: throw or continue
+        }
+
         return {
             success: true,
             transactionHash: hash,
