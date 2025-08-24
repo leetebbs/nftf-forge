@@ -2,7 +2,7 @@
 
 **🚀 Live Application:** [https://nftf-forge.vercel.app/](https://nftf-forge.vercel.app/)  
 **🎥 Demo Video:** [https://www.youtube.com/watch?v=UjwuT54AJuw](https://www.youtube.com/watch?v=UjwuT54AJuw)  
-**🎨 NftForge Contract:** `0x158d4964Fa28f9E72CCCcB9a6cD6699f2982Be01`  
+**🎨 NftForge Contract:** [https://sepolia.shapescan.xyz/address/0x158d4964Fa28f9E72CCCcB9a6cD6699f2982Be01](https://sepolia.shapescan.xyz/address/0x158d4964Fa28f9E72CCCcB9a6cD6699f2982Be01)  
 **💳 ForgePayment Contract:** `0x0F8B14c7a8f9Ac940C75fd764Fa7Fd61c1dB60C4`  
 **🤖 AI Wallet Address:** `0x473fa0F100981fffFf40dB48B29B97AF9A44Dbbc`
 
