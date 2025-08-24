@@ -21,6 +21,7 @@ export function PaymentCard({ onPaymentSuccess, targetAddress }: PaymentCardProp
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [fallbackMintPrice, setFallbackMintPrice] = useState<bigint | null>(null);
+  const [fallbackError, setFallbackError] = useState<string | null>(null);
 
   // Use target address if provided, otherwise use connected wallet address
   const userAddress = targetAddress || address;
@@ -125,23 +126,31 @@ export function PaymentCard({ onPaymentSuccess, targetAddress }: PaymentCardProp
   // Fallback: Fetch mint price from API if wagmi hook fails
   React.useEffect(() => {
     // Always try API first since we know it works
-    if (!fallbackMintPrice) {
+    if (!fallbackMintPrice && !fallbackError) {
       console.log('Loading mint price from API...');
       fetch('/api/mint-price')
         .then(res => res.json())
         .then(data => {
           if (data.mintPrice) {
             setFallbackMintPrice(BigInt(data.mintPrice));
+            setFallbackError(null);
             console.log('API mint price loaded:', data.mintPrice);
+          } else if (data.error) {
+            setFallbackError(data.error);
+            console.error('API returned error:', data.error);
           }
         })
-        .catch(err => console.error('API mint price failed:', err));
+        .catch(err => {
+          const errorMsg = 'Failed to load mint price from API';
+          setFallbackError(errorMsg);
+          console.error('API mint price failed:', err);
+        });
     }
-  }, [fallbackMintPrice]);
+  }, [fallbackMintPrice, fallbackError]);
 
   // Use wagmi price or fallback price
   const effectiveMintPrice = mintPrice || fallbackMintPrice;
-  const effectiveMintPriceLoading = mintPriceLoading && !fallbackMintPrice;
+  const effectiveMintPriceLoading = mintPriceLoading && !fallbackMintPrice && !fallbackError;
 
   if (!isConnected || !address) {
     return (
@@ -188,27 +197,16 @@ export function PaymentCard({ onPaymentSuccess, targetAddress }: PaymentCardProp
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Debug info - remove in production */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="text-xs text-gray-500 p-2 bg-gray-100 rounded">
-            Debug: Connected={isConnected ? 'Yes' : 'No'}, 
-            Address={address ? `${address.slice(0,6)}...` : 'None'}, 
-            MintPrice={effectiveMintPriceLoading ? 'Loading...' : effectiveMintPrice ? formatEther(effectiveMintPrice) : 'Error'}, 
-            Target={userAddress ? `${userAddress.slice(0,6)}...` : 'None'},
-            Fallback={fallbackMintPrice ? 'Used' : 'Not used'}
-          </div>
-        )}
-
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
-        {mintPriceError && (
+        {mintPriceError && !fallbackMintPrice && fallbackError && (
           <Alert variant="destructive">
             <AlertDescription>
-              Failed to load mint price from contract. Please refresh the page.
+              Failed to load mint price. Please check your connection and refresh the page.
             </AlertDescription>
           </Alert>
         )}
