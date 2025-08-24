@@ -34,22 +34,22 @@ Here are some stunning examples of NFTs minted with NFT Forge, showcasing the di
 <div align="center">
 
 ![Shape Network Art 1](./images/shape1.png)
-*Holographic Pentagon - Deep teals and electric blues with geometric crystalline aesthetics*
+
 
 ![Shape Network Art 2](./images/shape2.png)  
-*Cosmic Digital Hexagon - Vaporwave aesthetic with constellation patterns*
+
 
 ![Shape Network Art 3](./images/shape3.png)
-*Glitch Art Triangle - Modern digital illustration with high contrast and depth*
+
 
 ![Shape Network Art 4](./images/shape4.png)
-*Abstract Digital Prism - Stellar whites and nebula purples in perfect harmony*
+
 
 ![Shape Network Art 5](./images/shape5.png)
-*Low-Poly Cosmic Form - Geometric precision meets organic flow*
+
 
 ![Shape Network Art 6](./images/shape6.png)
-*Crystalline Structure - Iridescent whites with dramatic lighting effects*
+
 
 </div>
 
