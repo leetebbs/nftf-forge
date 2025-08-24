@@ -238,7 +238,16 @@ export async function POST(request: NextRequest) {
           const extractedImageUrl = imageUrlMatch && imageUrlMatch.length > 1 ? 
             (imageUrlMatch[1] || imageUrlMatch[2] || imageUrlMatch[0]) : null;
           
-          const response: any = {
+          const response: {
+            success: boolean;
+            message: string;
+            walletAddress: string;
+            transactionHash?: string;
+            blockNumber?: string;
+            details: string;
+            imageUrl?: string;
+            metadataHash?: string;
+          } = {
             success: true,
             message: "NFT created and minted successfully!",
             walletAddress: message, // Add the target wallet address
@@ -364,7 +373,7 @@ export async function POST(request: NextRequest) {
 }
 
 // Utility to extract DALL-E URL from OpenAI result
-function extractDalleUrl(result: any): string | null {
+function extractDalleUrl(result: unknown): string | null {
   // Implement your parsing logic here based on your OpenAI result structure
   // Example:
   if (typeof result === 'string') {

@@ -13,7 +13,9 @@ import { CheckCircle, Copy, ExternalLink, Loader2, Maximize2 } from 'lucide-reac
 import Link from 'next/link';
 import { useState } from 'react';
 import { isAddress } from 'viem';
-import { useAccount } from 'wagmi';
+import { useAccount, useReadContract } from 'wagmi';
+import { PaymentCard } from './payment-card';
+import { FORGE_PAYMENT_ABI, FORGE_PAYMENT_ADDRESS } from '@/const/contractDetails';
 
 // List of all available themes (should match backend)
 const ALL_THEMES = [
@@ -168,6 +170,28 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
   const [error, setError] = useState<string | null>(null);
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
 
+  // Check if target address can mint (has paid tokens)
+  const { data: canMint, refetch: refetchCanMint } = useReadContract({
+    address: FORGE_PAYMENT_ADDRESS,
+    abi: FORGE_PAYMENT_ABI,
+    functionName: 'userCanMint',
+    args: targetAddress && isAddress(targetAddress) ? [targetAddress] : undefined,
+    query: {
+      enabled: !!(targetAddress && isAddress(targetAddress)),
+    },
+  });
+
+  // Get paid token count for target address
+  const { data: paidTokenCount } = useReadContract({
+    address: FORGE_PAYMENT_ADDRESS,
+    abi: FORGE_PAYMENT_ABI,
+    functionName: 'getUserPaidTokenCount',
+    args: targetAddress && isAddress(targetAddress) ? [targetAddress] : undefined,
+    query: {
+      enabled: !!(targetAddress && isAddress(targetAddress)),
+    },
+  });
+
   const copyToClipboard = async (text: string, item: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -178,9 +202,18 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
     }
   };
 
+  const handlePaymentSuccess = () => {
+    refetchCanMint();
+  };
+
   const handleMint = async () => {
     if (!targetAddress || !isAddress(targetAddress)) {
       setError('Please enter a valid Ethereum address');
+      return;
+    }
+
+    if (!canMint) {
+      setError('Payment required before minting. Please complete payment first.');
       return;
     }
 
@@ -320,7 +353,7 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
 
           <Button 
             onClick={handleMint} 
-            disabled={isLoading || !targetAddress}
+            disabled={isLoading || !targetAddress || !canMint}
             className="w-full"
           >
             {isLoading ? (
@@ -328,6 +361,8 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Generating & Minting...
               </>
+            ) : !canMint ? (
+              'Payment Required First'
             ) : (
               'Generate & Mint NFT'
             )}
@@ -340,6 +375,28 @@ export function AIMintCard({ onProgress, onLoading }: AIMintCardProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Payment Card - Show when target address is set and user hasn't paid */}
+      {targetAddress && isAddress(targetAddress) && !canMint && (
+        <PaymentCard 
+          onPaymentSuccess={handlePaymentSuccess} 
+          targetAddress={targetAddress}
+        />
+      )}
+
+      {/* Payment Status - Show when user has credits */}
+      {targetAddress && isAddress(targetAddress) && canMint && (
+        <Card className="border-green-200 bg-green-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-green-700">
+              <CheckCircle className="h-5 w-5" />
+              <span className="font-medium">
+                Payment Complete - {Number(paidTokenCount || 0)} minting credit(s) available
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* NFT Display Card */}
       {result && nftData && (

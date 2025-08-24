@@ -4,6 +4,8 @@ import { getBalanceTool } from "./getBalance";
 import { getERC721BalanceTool } from "./getNftBalance";
 import { getWalletAddressTool } from "./getWalletAddress";
 import { uploadImageAndMetadataToIPFSTool } from "./uploadImageAndMetadataToIPFS";
+import { checkPaymentTool } from "./checkPayment";
+import { useMintingCreditTool } from "./useMintingCredit";
 import {uploadFileToPinata,uploadJsonToPinata} from "./pinataUtils";
 export interface ToolConfig<T = any> {
     definition: {
@@ -26,6 +28,8 @@ export const tools: Record<string, ToolConfig> =  {
     generateImage: generateImageTool,
     uploadImageAndMetadataToIPFS: uploadImageAndMetadataToIPFSTool,
     getWalletAddress: getWalletAddressTool,
+    checkPayment: checkPaymentTool,
+    useMintingCredit: useMintingCreditTool,
     uploadFileToPinata: {
         definition: {
             function: {
